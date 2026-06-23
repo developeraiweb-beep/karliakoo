@@ -1,97 +1,99 @@
 <?php
 
-declare(strict_types=1);
-
 require_once "../config/db.php";
 require_once "../includes/auth.php";
 
-requireLogin();
 requireRole(['admin']);
 
-$admin = currentUser();
+$page = max(1, (int)($_GET['page'] ?? 1));
+$limit = 25;
+$offset = ($page - 1) * $limit;
 
 $search = trim($_GET['search'] ?? '');
 $status = trim($_GET['status'] ?? '');
-$category = (int)($_GET['category'] ?? 0);
 
 /*
 |--------------------------------------------------------------------------
-| PRODUCT STATISTICS
+| ACTIONS
 |--------------------------------------------------------------------------
 */
+if (
+    isset($_GET['action']) &&
+    isset($_GET['id'])
+) {
 
-$stats = [
-    'total_products' => 0,
-    'active_products' => 0,
-    'inactive_products' => 0,
-    'out_of_stock' => 0,
-    'pending_approval' => 0
-];
+    $id = (int)$_GET['id'];
 
-$statsQuery = $conn->query("
-    SELECT
+    switch ($_GET['action']) {
 
-        COUNT(*) total_products,
+        case 'approve':
 
-        SUM(
-            CASE
-                WHEN status='active'
-                THEN 1
-                ELSE 0
-            END
-        ) active_products,
+            $stmt = $conn->prepare("
+                UPDATE products
+                SET approved=1
+                WHERE id=?
+            ");
 
-        SUM(
-            CASE
-                WHEN status='inactive'
-                THEN 1
-                ELSE 0
-            END
-        ) inactive_products,
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
 
-        SUM(
-            CASE
-                WHEN status='out_of_stock'
-                THEN 1
-                ELSE 0
-            END
-        ) out_of_stock,
+        break;
 
-        SUM(
-            CASE
-                WHEN approved=0
-                THEN 1
-                ELSE 0
-            END
-        ) pending_approval
+        case 'reject':
 
-    FROM products
-");
+            $stmt = $conn->prepare("
+                UPDATE products
+                SET approved=0
+                WHERE id=?
+            ");
 
-if($statsQuery)
-{
-    $stats = $statsQuery->fetch_assoc();
-}
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
 
-/*
-|--------------------------------------------------------------------------
-| LOAD CATEGORIES
-|--------------------------------------------------------------------------
-*/
+        break;
 
-$categories = [];
+        case 'feature':
 
-$catResult = $conn->query("
-    SELECT
-        id,
-        category_name
-    FROM categories
-    ORDER BY category_name ASC
-");
+            $stmt = $conn->prepare("
+                UPDATE products
+                SET featured=1
+                WHERE id=?
+            ");
 
-while($row = $catResult->fetch_assoc())
-{
-    $categories[] = $row;
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+
+        break;
+
+        case 'unfeature':
+
+            $stmt = $conn->prepare("
+                UPDATE products
+                SET featured=0
+                WHERE id=?
+            ");
+
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+
+        break;
+
+        case 'delete':
+
+            $stmt = $conn->prepare("
+                DELETE FROM products
+                WHERE id=?
+                LIMIT 1
+            ");
+
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+
+        break;
+    }
+
+    header("Location: products.php");
+    exit;
 }
 
 /*
@@ -99,124 +101,166 @@ while($row = $catResult->fetch_assoc())
 | FILTERS
 |--------------------------------------------------------------------------
 */
-
-$where = [];
+$where = ["1=1"];
 $params = [];
 $types = '';
 
-if(!empty($search))
-{
+if (!empty($search)) {
+
     $where[] = "
-        (
-            p.name LIKE ?
-            OR p.sku LIKE ?
-            OR s.shop_name LIKE ?
-        )
+    (
+        p.product_name LIKE ?
+        OR s.shop_name LIKE ?
+    )
     ";
 
-    $searchLike = "%{$search}%";
+    $like = "%{$search}%";
 
-    $params[] = $searchLike;
-    $params[] = $searchLike;
-    $params[] = $searchLike;
+    $params[] = $like;
+    $params[] = $like;
 
-    $types .= "sss";
+    $types .= "ss";
 }
 
-if(!empty($status))
-{
-    $where[] = "p.status = ?";
+if ($status !== '') {
 
-    $params[] = $status;
+    if ($status === 'approved') {
+        $where[] = "p.approved=1";
+    }
 
-    $types .= "s";
+    if ($status === 'pending') {
+        $where[] = "p.approved=0";
+    }
+
+    if ($status === 'featured') {
+        $where[] = "p.featured=1";
+    }
 }
 
-if($category > 0)
-{
-    $where[] = "p.category_id = ?";
-
-    $params[] = $category;
-
-    $types .= "i";
-}
-
-$sqlWhere = '';
-
-if(!empty($where))
-{
-    $sqlWhere =
-    " WHERE " .
-    implode(
-        ' AND ',
-        $where
-    );
-}
+$whereSql = implode(
+    " AND ",
+    $where
+);
 
 /*
 |--------------------------------------------------------------------------
-| LOAD PRODUCTS
+| TOTAL PRODUCTS
 |--------------------------------------------------------------------------
 */
-
-$sql = "
-
-SELECT
-
-    p.*,
-
-    c.category_name,
-
-    s.shop_name,
-
-    u.full_name seller_name
+$countSql = "
+SELECT COUNT(*) total
 
 FROM products p
 
-LEFT JOIN categories c
-ON c.id = p.category_id
-
 LEFT JOIN shops s
-ON s.id = p.shop_id
+ON s.seller_id=p.id
 
-LEFT JOIN users u
-ON u.id = s.seller_id
-
-{$sqlWhere}
-
-ORDER BY p.id DESC
-
-LIMIT 200
-
+WHERE {$whereSql}
 ";
 
-$stmt = $conn->prepare($sql);
+$countStmt = $conn->prepare($countSql);
 
-if(!empty($params))
-{
-    $stmt->bind_param(
+if (!empty($params)) {
+
+    $countStmt->bind_param(
         $types,
         ...$params
     );
 }
 
+$countStmt->execute();
+
+$totalRows =
+$countStmt
+->get_result()
+->fetch_assoc()['total'];
+
+$totalPages =
+max(
+    1,
+    ceil($totalRows / $limit)
+);
+
+/*
+|--------------------------------------------------------------------------
+| PRODUCTS
+|--------------------------------------------------------------------------
+*/
+$sql = "
+
+SELECT
+
+p.*,
+
+s.shop_name
+
+FROM products p
+
+LEFT JOIN shops s
+ON s.seller_id=p.id
+
+WHERE {$whereSql}
+
+ORDER BY p.id DESC
+
+LIMIT ?, ?
+
+";
+
+$stmt = $conn->prepare($sql);
+
+$bindTypes = $types . "ii";
+
+$bindParams = $params;
+$bindParams[] = $offset;
+$bindParams[] = $limit;
+
+$stmt->bind_param(
+    $bindTypes,
+    ...$bindParams
+);
+
 $stmt->execute();
 
 $products =
-$stmt->get_result();
+$stmt
+->get_result();
+
+/*
+|--------------------------------------------------------------------------
+| STATS
+|--------------------------------------------------------------------------
+*/
+$stats = $conn->query("
+SELECT
+
+COUNT(*) total_products,
+
+SUM(approved=1)
+approved_products,
+
+SUM(approved=0)
+pending_products,
+
+SUM(featured=1)
+featured_products,
+
+SUM(stock<=5)
+low_stock
+
+FROM products
+")->fetch_assoc();
 
 ?>
 
 <!DOCTYPE html>
 <html>
-
 <head>
 
 <meta charset="utf-8">
 
-<meta
-name="viewport"
-content="width=device-width, initial-scale=1">
+<meta name="viewport"
+content="width=device-width,initial-scale=1">
 
 <title>
 
@@ -228,36 +272,23 @@ Products Management
 href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
 rel="stylesheet">
 
-<link
-href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
-rel="stylesheet">
-
 <style>
 
 body{
-    background:#f4f6f9;
+background:#f5f6fa;
 }
 
-.card{
-    border:none;
-    border-radius:12px;
-    box-shadow:0 2px 10px rgba(0,0,0,.08);
+.card-box{
+background:#fff;
+padding:20px;
+border-radius:12px;
 }
 
-.stat-box{
-    text-align:center;
-}
-
-.stat-number{
-    font-size:30px;
-    font-weight:700;
-}
-
-.product-image{
-    width:60px;
-    height:60px;
-    object-fit:cover;
-    border-radius:8px;
+.product-img{
+width:50px;
+height:50px;
+object-fit:cover;
+border-radius:8px;
 }
 
 </style>
@@ -268,163 +299,68 @@ body{
 
 <div class="container-fluid py-4">
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-
-<div>
-
-<h2>
-
-<i class="fas fa-box"></i>
+<h2 class="mb-4">
 
 Products Management
 
 </h2>
 
-<p class="text-muted">
+<!-- KPI -->
 
-Marketplace Products Administration
-
-</p>
-
-</div>
-
-<a
-href="dashboard.php"
-class="btn btn-secondary">
-
-Dashboard
-
-</a>
-
-</div>
-<div class="row mb-4">
+<div class="row g-3 mb-4">
 
 <div class="col-md-2">
-
-<div class="card">
-
-<div class="card-body stat-box">
-
-<div class="stat-number text-primary">
-
-<?= number_format(
-(int)$stats['total_products']
-) ?>
-
+<div class="card-box shadow-sm">
+<h4><?= number_format($stats['total_products']) ?></h4>
+<small>Total</small>
 </div>
-
-<div>Total Products</div>
-
-</div>
-
-</div>
-
 </div>
 
 <div class="col-md-2">
-
-<div class="card">
-
-<div class="card-body stat-box">
-
-<div class="stat-number text-success">
-
-<?= number_format(
-(int)$stats['active_products']
-) ?>
-
+<div class="card-box shadow-sm">
+<h4><?= number_format($stats['approved_products']) ?></h4>
+<small>Approved</small>
 </div>
-
-<div>Active</div>
-
-</div>
-
-</div>
-
 </div>
 
 <div class="col-md-2">
-
-<div class="card">
-
-<div class="card-body stat-box">
-
-<div class="stat-number text-danger">
-
-<?= number_format(
-(int)$stats['inactive_products']
-) ?>
-
+<div class="card-box shadow-sm">
+<h4><?= number_format($stats['pending_products']) ?></h4>
+<small>Pending</small>
 </div>
-
-<div>Inactive</div>
-
-</div>
-
-</div>
-
 </div>
 
 <div class="col-md-2">
-
-<div class="card">
-
-<div class="card-body stat-box">
-
-<div class="stat-number text-warning">
-
-<?= number_format(
-(int)$stats['out_of_stock']
-) ?>
-
+<div class="card-box shadow-sm">
+<h4><?= number_format($stats['featured_products']) ?></h4>
+<small>Featured</small>
 </div>
-
-<div>Out Of Stock</div>
-
-</div>
-
-</div>
-
 </div>
 
 <div class="col-md-2">
-
-<div class="card">
-
-<div class="card-body stat-box">
-
-<div class="stat-number text-dark">
-
-<?= number_format(
-(int)$stats['pending_approval']
-) ?>
-
+<div class="card-box shadow-sm">
+<h4><?= number_format($stats['low_stock']) ?></h4>
+<small>Low Stock</small>
 </div>
-
-<div>Pending Approval</div>
-
 </div>
 
 </div>
 
-</div>
+<!-- FILTERS -->
 
-</div>
-<div class="card mb-4">
-
-<div class="card-body">
+<div class="card-box shadow-sm mb-4">
 
 <form method="GET">
 
 <div class="row">
 
-<div class="col-md-4">
+<div class="col-md-5">
 
 <input
 type="text"
 name="search"
 class="form-control"
-placeholder="Search product, SKU or shop..."
+placeholder="Search product"
 value="<?= htmlspecialchars($search) ?>">
 
 </div>
@@ -435,65 +371,10 @@ value="<?= htmlspecialchars($search) ?>">
 name="status"
 class="form-select">
 
-<option value="">
-
-All Statuses
-
-</option>
-
-<option
-value="active"
-<?= $status==='active'?'selected':'' ?>>
-
-Active
-
-</option>
-
-<option
-value="inactive"
-<?= $status==='inactive'?'selected':'' ?>>
-
-Inactive
-
-</option>
-
-<option
-value="out_of_stock"
-<?= $status==='out_of_stock'?'selected':'' ?>>
-
-Out Of Stock
-
-</option>
-
-</select>
-
-</div>
-
-<div class="col-md-3">
-
-<select
-name="category"
-class="form-select">
-
-<option value="">
-
-All Categories
-
-</option>
-
-<?php foreach($categories as $cat): ?>
-
-<option
-value="<?= $cat['id'] ?>"
-<?= $category==$cat['id']?'selected':'' ?>>
-
-<?= htmlspecialchars(
-$cat['category_name']
-) ?>
-
-</option>
-
-<?php endforeach; ?>
+<option value="">All Products</option>
+<option value="approved">Approved</option>
+<option value="pending">Pending</option>
+<option value="featured">Featured</option>
 
 </select>
 
@@ -504,7 +385,7 @@ $cat['category_name']
 <button
 class="btn btn-primary w-100">
 
-Filter
+Search
 
 </button>
 
@@ -516,32 +397,25 @@ Filter
 
 </div>
 
-</div>
-<div class="card">
+<!-- PRODUCTS TABLE -->
 
-<div class="card-header">
+<div class="card-box shadow-sm">
 
-Products List
+<div class="table-responsive">
 
-</div>
-
-<div class="card-body table-responsive">
-
-<table class="table table-bordered table-hover align-middle">
+<table class="table table-hover align-middle">
 
 <thead>
 
 <tr>
 
 <th>ID</th>
-<th>Image</th>
 <th>Product</th>
-<th>Category</th>
 <th>Shop</th>
 <th>Price</th>
 <th>Stock</th>
 <th>Status</th>
-<th>Approval</th>
+<th>Featured</th>
 <th>Actions</th>
 
 </tr>
@@ -550,244 +424,65 @@ Products List
 
 <tbody>
 
-<?php if($products->num_rows > 0): ?>
-
 <?php while($product = $products->fetch_assoc()): ?>
-
-<?php
-
-$statusColor =
-match($product['status'])
-{
-    'active'       => 'success',
-    'inactive'     => 'secondary',
-    'out_of_stock' => 'danger',
-    default        => 'dark'
-};
-
-$stockClass = '';
-
-if((int)$product['stock'] <= 0)
-{
-    $stockClass = 'text-danger fw-bold';
-}
-elseif((int)$product['stock'] <= (int)$product['min_stock_level'])
-{
-    $stockClass = 'text-warning fw-bold';
-}
-
-?>
 
 <tr>
 
 <td>
 
-#<?= (int)$product['id'] ?>
+#<?= $product['id'] ?>
 
 </td>
 
 <td>
 
-<?php
-
-$imagePath = '';
-
-if(!empty($product['image']))
-{
-    $imagePath = $product['image'];
-
-    $imagePath = str_replace(
-        '\\',
-        '/',
-        $imagePath
-    );
-
-    $imagePath = str_replace(
-        '../',
-        '',
-        $imagePath
-    );
-}
-
-?>
-
-<?php if(!empty($imagePath)): ?>
+<?php if(!empty($product['image'])): ?>
 
 <img
-src="../<?= htmlspecialchars($imagePath) ?>"
-alt="<?= htmlspecialchars($product['name']) ?>"
-class="product-image">
-
-<?php else: ?>
-
-<div
-class="product-image border d-flex align-items-center justify-content-center bg-light">
-
-<i class="fas fa-image text-muted"></i>
-
-</div>
+src="../uploads/products/<?= htmlspecialchars($product['image']) ?>"
+class="product-img me-2">
 
 <?php endif; ?>
-
-</td>
-
-<td>
-
-<strong>
 
 <?= htmlspecialchars(
 $product['name']
 ) ?>
 
-</strong>
-
-<br>
-
-<small class="text-muted">
-
-SKU:
-<?= htmlspecialchars(
-$product['sku']
-?? '-'
-) ?>
-
-</small>
-
-<br>
-
-<?php if(
-(int)$product['featured'] === 1
-): ?>
-
-<span class="badge bg-warning">
-
-Featured
-
-</span>
-
-<?php endif; ?>
-
-<?php if(
-(int)$product['is_wholesale'] === 1
-): ?>
-
-<span class="badge bg-info">
-
-Wholesale
-
-</span>
-
-<?php endif; ?>
-
 </td>
 
 <td>
-
-<?= htmlspecialchars(
-$product['category_name']
-?? 'Uncategorized'
-) ?>
-
-</td>
-
-<td>
-
-<strong>
 
 <?= htmlspecialchars(
 $product['shop_name']
-?? '-'
-) ?>
-
-</strong>
-
-<br>
-
-<small>
-
-<?= htmlspecialchars(
-$product['seller_name']
-?? '-'
-) ?>
-
-</small>
-
-</td>
-
-<td>
-
-<?php if(
-!empty($product['sale_price']) &&
-(float)$product['sale_price'] > 0
-): ?>
-
-<span class="text-decoration-line-through text-muted">
-
-TZS
-<?= number_format(
-(float)$product['price'],
-2
-) ?>
-
-</span>
-
-<br>
-
-<span class="text-success fw-bold">
-
-TZS
-<?= number_format(
-(float)$product['sale_price'],
-2
-) ?>
-
-</span>
-
-<?php else: ?>
-
-TZS
-<?= number_format(
-(float)$product['price'],
-2
-) ?>
-
-<?php endif; ?>
-
-</td>
-
-<td class="<?= $stockClass ?>">
-
-<?= number_format(
-(int)$product['stock']
+?? 'Unknown Shop'
 ) ?>
 
 </td>
 
 <td>
 
-<span
-class="badge bg-<?= $statusColor ?>">
+TZS
 
-<?= ucfirst(
-str_replace(
-'_',
-' ',
-$product['status']
-)
+<?= number_format(
+$product['price'],
+2
 ) ?>
-
-</span>
 
 </td>
 
 <td>
 
-<?php if(
-(int)$product['approved'] === 1
-): ?>
+<?= number_format(
+$product['stock']
+) ?>
 
-<span
-class="badge bg-success">
+</td>
+
+<td>
+
+<?php if($product['approved']): ?>
+
+<span class="badge bg-success">
 
 Approved
 
@@ -795,8 +490,7 @@ Approved
 
 <?php else: ?>
 
-<span
-class="badge bg-warning">
+<span class="badge bg-warning">
 
 Pending
 
@@ -808,95 +502,46 @@ Pending
 
 <td>
 
-<div
-class="btn-group btn-group-sm">
+<?= $product['featured']
+? '⭐'
+: '-' ?>
+
+</td>
+
+<td>
+
+<div class="btn-group">
 
 <a
-href="product-details.php?id=<?= (int)$product['id'] ?>"
-class="btn btn-primary">
+href="product-details.php?id=<?= $product['id'] ?>"
+class="btn btn-sm btn-primary">
 
-<i class="fas fa-eye"></i>
+View
 
 </a>
 
 <a
-href="edit-product.php?id=<?= (int)$product['id'] ?>"
-class="btn btn-success">
+href="?action=approve&id=<?= $product['id'] ?>"
+class="btn btn-sm btn-success">
 
-<i class="fas fa-edit"></i>
-
-</a>
-<?php if((int)$product['featured'] === 0): ?>
-
-<a
-href="product-action.php?action=feature&id=<?= (int)$product['id'] ?>"
-class="btn btn-info"
-onclick="return confirm('Feature this product?')">
-
-<i class="fas fa-star"></i>
+Approve
 
 </a>
 
-<?php else: ?>
-
 <a
-href="product-action.php?action=unfeature&id=<?= (int)$product['id'] ?>"
-class="btn btn-dark"
-onclick="return confirm('Remove featured status?')">
+href="?action=feature&id=<?= $product['id'] ?>"
+class="btn btn-sm btn-warning">
 
-<i class="fas fa-star-half-alt"></i>
+Feature
 
 </a>
 
-<?php endif; ?>
-
-<?php if(
-(int)$product['approved'] === 0
-): ?>
-
 <a
-href="product-action.php?action=approve&id=<?= (int)$product['id'] ?>"
-class="btn btn-warning"
-onclick="return confirm('Approve this product?')">
+href="?action=delete&id=<?= $product['id'] ?>"
+class="btn btn-sm btn-danger"
+onclick="return confirm('Delete product?')">
 
-<i class="fas fa-check"></i>
-
-</a>
-
-<?php endif; ?>
-
-<?php if(
-$product['status'] === 'active'
-): ?>
-
-<a
-href="product-action.php?action=disable&id=<?= (int)$product['id'] ?>"
-class="btn btn-secondary"
-onclick="return confirm('Disable this product?')">
-
-<i class="fas fa-ban"></i>
-
-</a>
-
-<?php else: ?>
-
-<a
-href="product-action.php?action=activate&id=<?= (int)$product['id'] ?>"
-class="btn btn-info"
-onclick="return confirm('Activate this product?')">
-
-<i class="fas fa-play"></i>
-
-</a>
-
-<?php endif; ?>
-
-<a
-href="product-action.php?action=delete&id=<?= (int)$product['id'] ?>"
-class="btn btn-danger"
-onclick="return confirm('Delete this product permanently?')">
-
-<i class="fas fa-trash"></i>
+Delete
 
 </a>
 
@@ -908,21 +553,6 @@ onclick="return confirm('Delete this product permanently?')">
 
 <?php endwhile; ?>
 
-<?php else: ?>
-
-<tr>
-
-<td
-colspan="10"
-class="text-center text-muted py-4">
-
-No products found.
-
-</td>
-
-</tr>
-
-<?php endif; ?>
 </tbody>
 
 </table>
@@ -930,61 +560,35 @@ No products found.
 </div>
 
 </div>
-<div class="card mt-4">
 
-<div class="card-header">
+<!-- PAGINATION -->
 
-Inventory Health Overview
+<nav class="mt-4">
 
-</div>
+<ul class="pagination">
 
-<div class="card-body">
+<?php for($i=1;$i<=$totalPages;$i++): ?>
 
-<div class="row">
+<li
+class="page-item <?= $page==$i?'active':'' ?>">
 
-<div class="col-md-4">
+<a
+class="page-link"
+href="?page=<?= $i ?>&search=<?= urlencode($search) ?>&status=<?= urlencode($status) ?>">
 
-<div class="alert alert-success">
+<?= $i ?>
 
-<i class="fas fa-check-circle"></i>
+</a>
 
-Approved and active products are visible to customers.
+</li>
 
-</div>
+<?php endfor; ?>
 
-</div>
+</ul>
 
-<div class="col-md-4">
+</nav>
 
-<div class="alert alert-warning">
-
-<i class="fas fa-box-open"></i>
-
-Products near minimum stock should be replenished.
-
-</div>
-
-</div>
-
-<div class="col-md-4">
-
-<div class="alert alert-danger">
-
-<i class="fas fa-exclamation-triangle"></i>
-
-Out-of-stock products may affect marketplace conversion.
-
-</div>
-
-</div>
-
-</div>
-
-</div>
-
-</div>
 </div>
 
 </body>
-
 </html>
