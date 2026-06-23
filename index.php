@@ -1,235 +1,558 @@
 <?php
+
 session_start();
-require_once "config/db.php";
+
+require_once __DIR__ . '/config/db.php';
 
 /*
 |--------------------------------------------------------------------------
-| Fetch Categories
+| SITE SETTINGS
 |--------------------------------------------------------------------------
 */
+
+$siteName = "Karliakoo Marketplace";
+
+/*
+|--------------------------------------------------------------------------
+| CATEGORIES
+|--------------------------------------------------------------------------
+*/
+
 $categories = [];
-$catQuery = mysqli_query($conn, "
-    SELECT *
+
+$catSql = "
+    SELECT
+        id,
+        category_name,
+        image,
+        icon,
+        slug
     FROM categories
     WHERE status='active'
     ORDER BY category_name ASC
     LIMIT 12
-");
+";
 
-if($catQuery){
-    while($row = mysqli_fetch_assoc($catQuery)){
+$catResult = mysqli_query($conn, $catSql);
+
+if ($catResult) {
+
+    while ($row = mysqli_fetch_assoc($catResult)) {
+
         $categories[] = $row;
     }
 }
 
 /*
 |--------------------------------------------------------------------------
-| Featured Products
+| FEATURED PRODUCTS
 |--------------------------------------------------------------------------
 */
-$products = [];
-$productQuery = mysqli_query($conn, "
-    SELECT p.*, s.shop_name
-    FROM products p
-    LEFT JOIN shops s ON p.shop_id=s.id
-    WHERE p.status='active'
-    ORDER BY p.id DESC
-    LIMIT 12
-");
 
-if($productQuery){
-    while($row = mysqli_fetch_assoc($productQuery)){
+$products = [];
+
+$productSql = "
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.price,
+    p.sale_price,
+    p.image,
+    p.featured_image,
+    p.short_description,
+    p.views,
+    p.sold_count,
+
+    s.shop_name,
+
+    c.category_name
+
+FROM products p
+
+LEFT JOIN shops s
+ON p.shop_id = s.id
+
+LEFT JOIN categories c
+ON p.category_id = c.id
+
+WHERE
+p.status='active'
+AND p.approved=1
+
+ORDER BY
+p.views DESC,
+p.sold_count DESC,
+p.id DESC
+
+LIMIT 12
+";
+
+$productResult =
+mysqli_query(
+    $conn,
+    $productSql
+);
+
+if ($productResult) {
+
+    while (
+        $row =
+        mysqli_fetch_assoc(
+            $productResult
+        )
+    ) {
+
         $products[] = $row;
     }
 }
+
 ?>
+
 <!DOCTYPE html>
+
 <html lang="en">
+
 <head>
+
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Karliakoo Marketplace</title>
+<meta
+name="viewport"
+content="width=device-width, initial-scale=1">
 
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<title>
+<?= htmlspecialchars($siteName) ?>
+</title>
 
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+<meta
+name="description"
+content="Buy and sell products across Tanzania on Karliakoo Marketplace.">
+
+<link
+href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+rel="stylesheet">
+
+<link
+href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+rel="stylesheet">
 
 <style>
+
+:root{
+--primary:#0d6efd;
+--dark:#111827;
+--light:#f8fafc;
+}
+
 body{
-    background:#f5f6fa;
+background:#f5f6fa;
+font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;
 }
 
 .topbar{
-    background:#0d6efd;
-    color:white;
-    padding:8px 0;
-    font-size:14px;
+background:var(--dark);
+color:#fff;
+padding:8px 0;
+font-size:14px;
 }
 
 .navbar-brand{
-    font-weight:700;
-    font-size:28px;
+font-weight:800;
+font-size:28px;
 }
 
 .hero{
-    height:450px;
-    background:url('assets/images/hero.jpg') center center/cover;
-    border-radius:15px;
-    overflow:hidden;
-    position:relative;
+height:520px;
+background:
+linear-gradient(
+rgba(0,0,0,.55),
+rgba(0,0,0,.55)
+),
+url('assets/images/hero.jpg');
+background-size:cover;
+background-position:center;
+border-radius:20px;
+overflow:hidden;
+display:flex;
+align-items:center;
+padding:50px;
+color:#fff;
 }
 
-.hero-overlay{
-    background:rgba(0,0,0,.55);
-    height:100%;
-    display:flex;
-    align-items:center;
-    color:white;
-    padding:40px;
+.hero h1{
+font-size:56px;
+font-weight:800;
+}
+
+.hero p{
+font-size:20px;
+max-width:650px;
 }
 
 .category-card{
-    background:white;
-    border-radius:12px;
-    padding:20px;
-    text-align:center;
-    transition:.3s;
+background:#fff;
+border-radius:16px;
+padding:25px;
+text-align:center;
+transition:.3s;
+height:100%;
+box-shadow:0 2px 10px rgba(0,0,0,.05);
 }
 
 .category-card:hover{
-    transform:translateY(-5px);
+transform:translateY(-6px);
+box-shadow:0 10px 20px rgba(0,0,0,.1);
+}
+
+.category-icon{
+font-size:40px;
+color:var(--primary);
+margin-bottom:12px;
+}
+
+.section-title{
+font-size:32px;
+font-weight:700;
 }
 
 .product-card{
-    background:white;
-    border-radius:15px;
-    overflow:hidden;
-    transition:.3s;
+background:#fff;
+border-radius:18px;
+overflow:hidden;
+transition:.3s;
+height:100%;
+box-shadow:0 2px 10px rgba(0,0,0,.06);
 }
 
 .product-card:hover{
-    transform:translateY(-6px);
+transform:translateY(-5px);
+box-shadow:0 15px 30px rgba(0,0,0,.1);
 }
 
 .product-image{
-    height:220px;
-    object-fit:cover;
-    width:100%;
+width:100%;
+height:250px;
+object-fit:cover;
+background:#fff;
 }
 
 .shop-badge{
-    background:#198754;
-    color:white;
-    padding:4px 10px;
-    border-radius:50px;
-    font-size:12px;
+background:#198754;
+color:#fff;
+padding:4px 10px;
+border-radius:50px;
+font-size:12px;
 }
 
-.footer{
-    background:#111827;
-    color:white;
-    padding:50px 0;
+.sticky-top{
+z-index:1030;
 }
+
+.product-card{
+border:none;
+border-radius:18px;
+overflow:hidden;
+transition:all .25s ease;
+background:#fff;
+}
+
+.product-card:hover{
+transform:translateY(-8px);
+box-shadow:0 15px 35px rgba(0,0,0,.12);
+}
+
+.product-image{
+width:100%;
+height:250px;
+object-fit:cover;
+background:#f8f9fa;
+}
+
+.shop-badge{
+background:#198754;
+color:#fff;
+padding:4px 10px;
+border-radius:50px;
+font-size:12px;
+font-weight:600;
+}
+
 </style>
+
 </head>
+
 <body>
 
-<!-- TOP BAR -->
+<!-- TOPBAR -->
+
 <div class="topbar">
+
 <div class="container">
+
 <div class="d-flex justify-content-between">
+
 <div>
-<i class="fa fa-phone"></i> +255 760 342 004
-</div>
-<div>
-Free Delivery | Trusted Sellers | Secure Payments
-</div>
-</div>
-</div>
+
+<i class="fas fa-phone"></i>
++255 760 342 004
+
 </div>
 
-<!-- NAVBAR -->
-<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+<div>
+
+Trusted Sellers |
+Secure Payments |
+Fast Delivery
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- NAVIGATION -->
+
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
+
 <div class="container">
 
-<a class="navbar-brand text-primary" href="#">
+<a
+class="navbar-brand text-primary"
+href="index.php">
+
 Karliakoo
+
 </a>
 
-<form action="search.php" method="GET" class="d-flex">
+<button
+class="navbar-toggler"
+type="button"
+data-bs-toggle="collapse"
+data-bs-target="#navbarMain">
+
+<span class="navbar-toggler-icon"></span>
+
+</button>
+
+<div
+class="collapse navbar-collapse"
+id="navbarMain">
+
+<ul class="navbar-nav me-auto">
+
+<li class="nav-item">
+<a
+class="nav-link"
+href="index.php">
+Home
+</a>
+</li>
+
+<li class="nav-item">
+<a
+class="nav-link"
+href="products.php">
+Products
+</a>
+</li>
+
+<li class="nav-item">
+<a
+class="nav-link"
+href="category.php">
+Categories
+</a>
+</li>
+
+<li class="nav-item">
+<a
+class="nav-link"
+href="shop.php">
+Shops
+</a>
+</li>
+
+<li class="nav-item">
+<a
+class="nav-link"
+href="b2b/index.php">
+B2B Wholesale
+</a>
+</li>
+
+<li class="nav-item">
+<a
+class="nav-link"
+href="contact.php">
+Contact
+</a>
+</li>
+
+</ul>
+
+<form
+action="search.php"
+method="GET"
+class="d-flex me-3">
 
 <input
-type="text"
+type="search"
 name="q"
 class="form-control me-2"
-placeholder="Search products...">
+placeholder="Search products">
 
-<button class="btn btn-primary">
-Search
+<button
+class="btn btn-primary">
+
+<i class="fas fa-search"></i>
+
 </button>
 
 </form>
 
-<div>
-<a href="login.php" class="btn btn-outline-primary">
+<div class="d-flex gap-2">
+
+<a
+href="wishlist.php"
+class="btn btn-outline-secondary">
+
+<i class="fas fa-heart"></i>
+
+</a>
+
+<a
+href="cart.php"
+class="btn btn-outline-primary">
+
+<i class="fas fa-shopping-cart"></i>
+
+</a>
+
+<a
+href="login.php"
+class="btn btn-outline-dark">
+
 Login
+
 </a>
 
-<a href="register.php" class="btn btn-primary">
+<a
+href="register.php"
+class="btn btn-primary">
+
 Register
+
 </a>
+
 </div>
 
 </div>
+
+</div>
+
 </nav>
 
-
 <!-- HERO -->
+
 <div class="container mt-4">
+
 <div class="hero">
-<div class="hero-overlay">
 
 <div>
-<h1 class="display-4 fw-bold">
-Karliakoo Marketplace
+
+<h1>
+
+Tanzania's Digital Marketplace
+
 </h1>
 
-<p class="lead">
-Buy, Sell and Grow your business across Tanzania.
+<p>
+
+Buy products,
+discover trusted sellers,
+and grow your business across Tanzania.
+
 </p>
 
-<a href="products.php" class="btn btn-warning btn-lg">
+<div class="mt-4">
+
+<a
+href="products.php"
+class="btn btn-warning btn-lg me-2">
+
 Shop Now
+
 </a>
+
+<a
+href="b2b/index.php"
+class="btn btn-outline-light btn-lg">
+
+Wholesale
+
+</a>
+
 </div>
 
 </div>
+
 </div>
+
 </div>
 
 <!-- CATEGORIES -->
+
 <div class="container mt-5">
 
-<h3 class="mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4">
+
+<h2 class="section-title">
+
 Popular Categories
-</h3>
+
+</h2>
+
+<a
+href="categories.php">
+
+View All
+
+</a>
+
+</div>
 
 <div class="row">
 
 <?php foreach($categories as $cat): ?>
 
-<div class="col-lg-2 col-md-3 col-6 mb-3">
+<div class="col-lg-2 col-md-3 col-6 mb-4">
+
+<a
+href="category.php?id=<?= (int)$cat['id'] ?>"
+class="text-decoration-none text-dark">
 
 <div class="category-card">
 
-<i class="fa fa-box fa-2x text-primary mb-2"></i>
+<div class="category-icon">
+
+<i class="fas fa-box"></i>
+
+</div>
 
 <h6>
-<?= htmlspecialchars($cat['category_name']) ?>
+
+<?= htmlspecialchars(
+$cat['category_name']
+) ?>
+
 </h6>
 
 </div>
+
+</a>
 
 </div>
 
@@ -239,15 +562,23 @@ Popular Categories
 
 </div>
 
-<!-- PRODUCTS -->
+<!-- PRODUCTS HEADER -->
+
 <div class="container mt-5">
 
-<div class="d-flex justify-content-between mb-3">
+<div class="d-flex justify-content-between align-items-center mb-4">
 
-<h3>Trending Products</h3>
+<h2 class="section-title">
 
-<a href="products.php">
-View All
+Trending Products
+
+</h2>
+
+<a
+href="products.php">
+
+View All Products
+
 </a>
 
 </div>
@@ -256,40 +587,222 @@ View All
 
 <?php foreach($products as $product): ?>
 
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| PRODUCT IMAGE HANDLER
+|--------------------------------------------------------------------------
+*/
+
+$productImage = "assets/images/no-image.png";
+
+$imagePath = '';
+
+if (!empty($product['featured_image'])) {
+
+    $imagePath = trim($product['featured_image']);
+
+} elseif (!empty($product['image'])) {
+
+    $imagePath = trim($product['image']);
+}
+
+/*
+|--------------------------------------------------------------------------
+| NORMALIZE PATH
+|--------------------------------------------------------------------------
+*/
+
+$imagePath = ltrim($imagePath, '/\\');
+
+/*
+|--------------------------------------------------------------------------
+| VERIFY FILE EXISTS
+|--------------------------------------------------------------------------
+*/
+
+if (
+    !empty($imagePath)
+    &&
+    file_exists(__DIR__ . '/' . $imagePath)
+) {
+    $productImage = $imagePath;
+}
+
+/*
+|--------------------------------------------------------------------------
+| PRICING
+|--------------------------------------------------------------------------
+*/
+
+$price = (float)($product['price'] ?? 0);
+
+$salePrice = (float)($product['sale_price'] ?? 0);
+
+$finalPrice =
+(
+    $salePrice > 0
+    &&
+    $salePrice < $price
+)
+? $salePrice
+: $price;
+
+/*
+|--------------------------------------------------------------------------
+| PRODUCT URL
+|--------------------------------------------------------------------------
+*/
+
+$productUrl =
+!empty($product['slug'])
+? "product-details.php?slug=" . urlencode($product['slug'])
+: "product-details.php?id=" . (int)$product['id'];
+
+?>
+
 <div class="col-lg-3 col-md-4 col-sm-6 mb-4">
 
-<div class="product-card shadow-sm">
+<div class="product-card h-100 shadow-sm">
+
+<div class="position-relative">
 
 <img
-src="uploads/products/<?= htmlspecialchars($product['image']) ?>"
+src="<?= htmlspecialchars($productImage) ?>"
+alt="<?= htmlspecialchars($product['name']) ?>"
 class="product-image"
-alt=""
->
+loading="lazy">
 
-<div class="p-3">
+<?php if($salePrice > 0 && $salePrice < $price): ?>
 
-<div class="shop-badge mb-2">
-<?= htmlspecialchars($product['shop_name']) ?>
+<span
+class="badge bg-danger position-absolute top-0 end-0 m-2">
+
+SALE
+
+</span>
+
+<?php endif; ?>
+
 </div>
 
-<h6>
-<?= htmlspecialchars($product['name']) ?>
+<div class="p-3 d-flex flex-column h-100">
+
+<div class="d-flex justify-content-between mb-2">
+
+<span class="shop-badge">
+
+<?= htmlspecialchars(
+$product['shop_name']
+?? 'Marketplace'
+) ?>
+
+</span>
+
+<span class="badge bg-light text-dark">
+
+<?= htmlspecialchars(
+$product['category_name']
+?? 'General'
+) ?>
+
+</span>
+
+</div>
+
+<h6
+class="fw-bold mb-2"
+style="
+min-height:48px;
+">
+
+<?= htmlspecialchars(
+$product['name']
+) ?>
+
 </h6>
 
-<h5 class="text-primary">
-TZS <?= number_format($product['price']) ?>
+<p
+class="text-muted small mb-3"
+style="
+min-height:60px;
+">
+
+<?= htmlspecialchars(
+mb_strimwidth(
+$product['short_description']
+?? '',
+0,
+90,
+'...'
+)
+) ?>
+
+</p>
+
+<?php if($salePrice > 0 && $salePrice < $price): ?>
+
+<div>
+
+<span class="text-danger fw-bold">
+
+TZS
+
+<?= number_format(
+$salePrice
+) ?>
+
+</span>
+
+<br>
+
+<small
+class="text-decoration-line-through text-muted">
+
+TZS
+
+<?= number_format(
+$price
+) ?>
+
+</small>
+
+</div>
+
+<?php else: ?>
+
+<h5 class="text-primary fw-bold">
+
+TZS
+
+<?= number_format(
+$price
+) ?>
+
 </h5>
 
+<?php endif; ?>
+
+<div class="d-grid gap-2 mt-3">
+
 <a
-href="product.php?id=<?= $product['id'] ?>"
-class="btn btn-primary w-100"
->
+href="product-details.php?id=<?= (int)$product['id'] ?>"
+class="btn btn-primary">
+
 View Product
+
 </a>
 
-<a href="category.php?id=<?= $cat['id'] ?>">
-    <?= htmlspecialchars($cat['category_name']) ?>
+<a
+href="wishlist-add.php?id=<?= (int)$product['id'] ?>"
+class="btn btn-outline-secondary">
+
+Add Wishlist
+
 </a>
+
+</div>
 
 </div>
 
@@ -303,63 +816,342 @@ View Product
 
 </div>
 
-<!-- WHOLESALE -->
+<!-- B2B SECTION -->
+
 <div class="container mt-5">
 
-<div class="bg-primary text-white p-5 rounded">
+<div
+class="p-5 rounded-4 text-white"
+style="
+background:
+linear-gradient(
+135deg,
+#0d6efd,
+#084298
+);
+">
 
-<h2>
+<div class="row align-items-center">
+
+<div class="col-lg-8">
+
+<h2 class="fw-bold">
+
 B2B Wholesale Marketplace
+
 </h2>
 
-<p>
-Connect with suppliers and wholesalers across Tanzania.
+<p class="lead">
+
+Connect with suppliers,
+manufacturers,
+importers and distributors
+across Tanzania.
+
 </p>
 
-<a href="b2b/index.php" class="btn btn-light">
+</div>
+
+<div class="col-lg-4 text-lg-end">
+
+<a
+href="b2b/index.php"
+class="btn btn-light btn-lg">
+
 Explore B2B
+
 </a>
 
 </div>
 
 </div>
 
+</div>
+
+</div>
+
+<!-- MARKETPLACE STATS -->
+
+<div class="container mt-5">
+
+<div class="row text-center">
+
+<div class="col-md-3 mb-3">
+
+<div class="bg-white rounded-4 p-4 shadow-sm">
+
+<h2 class="text-primary">
+
+1000+
+
+</h2>
+
+<p class="mb-0">
+
+Products
+
+</p>
+
+</div>
+
+</div>
+
+<div class="col-md-3 mb-3">
+
+<div class="bg-white rounded-4 p-4 shadow-sm">
+
+<h2 class="text-success">
+
+500+
+
+</h2>
+
+<p class="mb-0">
+
+Verified Sellers
+
+</p>
+
+</div>
+
+</div>
+
+<div class="col-md-3 mb-3">
+
+<div class="bg-white rounded-4 p-4 shadow-sm">
+
+<h2 class="text-warning">
+
+50+
+
+</h2>
+
+<p class="mb-0">
+
+Regions Served
+
+</p>
+
+</div>
+
+</div>
+
+<div class="col-md-3 mb-3">
+
+<div class="bg-white rounded-4 p-4 shadow-sm">
+
+<h2 class="text-danger">
+
+24/7
+
+</h2>
+
+<p class="mb-0">
+
+Support
+
+</p>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- NEWSLETTER -->
+
+<div class="container mt-5">
+
+<div class="bg-white rounded-4 p-5 shadow-sm">
+
+<div class="row align-items-center">
+
+<div class="col-lg-6">
+
+<h3>
+
+Subscribe To Updates
+
+</h3>
+
+<p class="text-muted">
+
+Receive promotions,
+offers and marketplace news.
+
+</p>
+
+</div>
+
+<div class="col-lg-6">
+
+<form
+action="subscribe.php"
+method="POST">
+
+<div class="input-group">
+
+<input
+type="email"
+name="email"
+class="form-control"
+placeholder="Enter email address"
+required>
+
+<button
+class="btn btn-primary">
+
+Subscribe
+
+</button>
+
+</div>
+
+</form>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
 <!-- FOOTER -->
-<footer class="footer mt-5">
+
+<footer
+style="
+background:#111827;
+color:white;
+"
+class="mt-5 py-5">
 
 <div class="container">
 
 <div class="row">
 
-<div class="col-md-4">
-<h4>Karliakoo</h4>
+<div class="col-lg-4 mb-4">
+
+<h4>
+
+Karliakoo Marketplace
+
+</h4>
+
 <p>
-The future of Tanzanian eCommerce.
+
+The future of Tanzanian
+eCommerce and B2B trade.
+
 </p>
+
 </div>
 
-<div class="col-md-4">
-<h5>Quick Links</h5>
+<div class="col-lg-2 mb-4">
+
+<h5>
+
+Marketplace
+
+</h5>
 
 <ul class="list-unstyled">
-<li><a href="#" class="text-white">Products</a></li>
-<li><a href="#" class="text-white">Shops</a></li>
-<li><a href="#" class="text-white">B2B</a></li>
-<li><a href="#" class="text-white">Delivery</a></li>
+
+<li>
+<a
+href="products.php"
+class="text-white text-decoration-none">
+Products
+</a>
+</li>
+
+<li>
+<a
+href="categories.php"
+class="text-white text-decoration-none">
+Categories
+</a>
+</li>
+
+<li>
+<a
+href="shops.php"
+class="text-white text-decoration-none">
+Shops
+</a>
+</li>
+
 </ul>
 
 </div>
 
-<div class="col-md-4">
+<div class="col-lg-2 mb-4">
 
-<h5>Contact</h5>
+<h5>
+
+B2B
+
+</h5>
+
+<ul class="list-unstyled">
+
+<li>
+<a
+href="b2b/index.php"
+class="text-white text-decoration-none">
+Wholesale
+</a>
+</li>
+
+<li>
+<a
+href="b2b/rfqs.php"
+class="text-white text-decoration-none">
+RFQs
+</a>
+</li>
+
+<li>
+<a
+href="b2b/orders.php"
+class="text-white text-decoration-none">
+Orders
+</a>
+</li>
+
+</ul>
+
+</div>
+
+<div class="col-lg-4">
+
+<h5>
+
+Contact
+
+</h5>
 
 <p>
-support@karliakoo.com
+
+<i class="fas fa-envelope"></i>
+[support@karliakoo.com](mailto:support@karliakoo.com)
+
 </p>
 
 <p>
+
+<i class="fas fa-phone"></i>
++255 760 342 004
+
+</p>
+
+<p>
+
+<i class="fas fa-location-dot"></i>
 Dar es Salaam, Tanzania
+
 </p>
 
 </div>
@@ -368,15 +1160,23 @@ Dar es Salaam, Tanzania
 
 <hr>
 
-<p class="text-center mb-0">
-© <?php echo date("Y"); ?> Karliakoo Marketplace
-</p>
+<div class="text-center">
+
+© <?= date('Y') ?>
+
+Karliakoo Marketplace.
+
+All Rights Reserved.
+
+</div>
 
 </div>
 
 </footer>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script
+src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js">
+</script>
 
 </body>
 </html>

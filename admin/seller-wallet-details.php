@@ -269,77 +269,232 @@ $auditLogs =
 $auditStmt
 ->get_result();
 
-/*
-|--------------------------------------------------------------------------
-| MANUAL WALLET ADJUSTMENT
-|--------------------------------------------------------------------------
-*/
 
 $walletMessage = '';
 $walletError   = '';
 
-if(
-    $_SERVER['REQUEST_METHOD'] === 'POST'
-    &&
-    isset($_POST['adjust_wallet'])
+if (
+$_SERVER['REQUEST_METHOD'] === 'POST'
+&&
+isset($_POST['adjust_wallet'])
 )
 {
-    $amount =
-    (float)(
-        $_POST['amount']
-        ?? 0
-    );
+$amount = (float)($_POST['amount'] ?? 0);
 
-    $type =
-    trim(
-        $_POST['adjustment_type']
-        ?? ''
-    );
 
-    $note =
-    trim(
-        $_POST['note']
-        ?? ''
-    );
+$type = trim(
+    $_POST['adjustment_type']
+    ?? ''
+);
 
-    if($amount <= 0)
-    {
-        $walletError =
-        "Invalid amount.";
-    }
-    elseif(
-        !in_array(
-            $type,
-            ['credit','debit']
-        )
+$note = trim(
+    $_POST['note']
+    ?? ''
+);
+
+if ($amount <= 0)
+{
+    $walletError = 'Invalid amount.';
+}
+elseif (
+    !in_array(
+        $type,
+        ['credit','debit'],
+        true
     )
-    {
-        $walletError =
-        "Invalid adjustment type.";
-    }
-    else
-    {
-        $conn->begin_transaction();
+)
+{
+    $walletError = 'Invalid adjustment type.';
+}
+else
+{
+    $conn->begin_transaction();
 
-        try
+    try
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | GET OR CREATE WALLET
+        |--------------------------------------------------------------------------
+        */
+
+        $walletStmt = $conn->prepare("
+            SELECT id, balance
+            FROM wallets
+            WHERE user_id = ?
+            LIMIT 1
+        ");
+
+        $walletStmt->bind_param(
+            "i",
+            $sellerId
+        );
+
+        $walletStmt->execute();
+
+        $wallet =
+        $walletStmt
+        ->get_result()
+        ->fetch_assoc();
+
+        if (!$wallet)
         {
-            if($type === 'credit')
+            $createWallet =
+            $conn->prepare("
+                INSERT INTO wallets
+                (
+                    user_id,
+                    balance
+                )
+                VALUES
+                (
+                    ?,
+                    0
+                )
+            ");
+
+            $createWallet->bind_param(
+                "i",
+                $sellerId
+            );
+
+            $createWallet->execute();
+
+            $walletId =
+            (int)$conn->insert_id;
+
+            $currentBalance = 0;
+        }
+        else
+        {
+            $walletId =
+            (int)$wallet['id'];
+
+            $currentBalance =
+            (float)$wallet['balance'];
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | DEBIT VALIDATION
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            $type === 'debit'
+            &&
+            $currentBalance < $amount
+        )
+        {
+            throw new Exception(
+                'Insufficient wallet balance.'
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | UPDATE BALANCE
+        |--------------------------------------------------------------------------
+        */
+
+        if ($type === 'credit')
+        {
+            $newBalance =
+            $currentBalance + $amount;
+        }
+        else
+        {
+            $newBalance =
+            $currentBalance - $amount;
+        }
+
+        $updateWallet =
+        $conn->prepare("
+            UPDATE wallets
+            SET balance = ?
+            WHERE id = ?
+            LIMIT 1
+        ");
+
+        $updateWallet->bind_param(
+            "di",
+            $newBalance,
+            $walletId
+        );
+
+        $updateWallet->execute();
+
+        /*
+        |--------------------------------------------------------------------------
+        | LOG TRANSACTION
+        |--------------------------------------------------------------------------
+        */
+
+        $description =
+        !empty($note)
+        ? $note
+        : 'Manual wallet adjustment by admin';
+
+        $transaction =
+        $conn->prepare("
+            INSERT INTO wallet_transactions
+            (
+                wallet_id,
+                type,
+                amount,
+                description
+            )
+            VALUES
+            (
+                ?,
+                ?,
+                ?,
+                ?
+            )
+        ");
+
+        $transaction->bind_param(
+            "isds",
+            $walletId,
+            $type,
+            $amount,
+            $description
+        );
+
+        $transaction->execute();
+
+        /*
+        |--------------------------------------------------------------------------
+        | OPTIONAL SELLER WALLET TABLE
+        |--------------------------------------------------------------------------
+        */
+
+        $sellerWalletExists =
+        $conn->query("
+            SHOW TABLES LIKE 'seller_wallets'
+        ");
+
+        if (
+            $sellerWalletExists &&
+            $sellerWalletExists->num_rows > 0
+        )
+        {
+            if ($type === 'credit')
             {
-                $walletUpdate =
+                $sellerWallet =
                 $conn->prepare("
                     UPDATE seller_wallets
                     SET
+                        available_balance =
+                        available_balance + ?,
 
-                    available_balance =
-                    available_balance + ?,
-
-                    total_earned =
-                    total_earned + ?
+                        total_earned =
+                        total_earned + ?
 
                     WHERE seller_id = ?
                 ");
 
-                $walletUpdate->bind_param(
+                $sellerWallet->bind_param(
                     "ddi",
                     $amount,
                     $amount,
@@ -348,25 +503,42 @@ if(
             }
             else
             {
-                $walletUpdate =
+                $sellerWallet =
                 $conn->prepare("
                     UPDATE seller_wallets
                     SET
-
-                    available_balance =
-                    available_balance - ?
-
+                        available_balance =
+                        available_balance - ?
                     WHERE seller_id = ?
                 ");
 
-                $walletUpdate->bind_param(
+                $sellerWallet->bind_param(
                     "di",
                     $amount,
                     $sellerId
                 );
             }
 
-            $walletUpdate->execute();
+            $sellerWallet->execute();
+        }
+
+        $conn->commit();
+
+        $walletMessage =
+        'Wallet adjusted successfully.';
+    }
+    catch (Exception $e)
+    {
+        $conn->rollback();
+
+        $walletError =
+        $e->getMessage();
+    }
+}
+
+
+}
+
 
             /*
             |----------------------------------------------------------
@@ -404,68 +576,111 @@ if(
 
             $transaction->execute();
 
-            /*
-            |----------------------------------------------------------
-            | AUDIT LOG
-            |----------------------------------------------------------
-            */
 
-            $audit =
-            $conn->prepare("
-                INSERT INTO audit_logs
-                (
-                    user_id,
-                    action,
-                    description,
-                    created_at
-                )
-                VALUES
-                (
-                    ?,
-                    ?,
-                    ?,
-                    NOW()
-                )
-            ");
+                                                                        
 
-            $action =
-            "wallet_adjustment";
+$audit =
+$conn->prepare("
+INSERT INTO audit_logs
+(
+user_id,
+action,
+table_name,
+created_at
+)
+VALUES
+(
+?,
+?,
+?,
+NOW()
+)
+");
 
-            $description =
-            strtoupper($type) .
-            " TZS " .
-            number_format(
-                $amount,
-                2
-            ) .
-            " to seller #" .
-            $sellerId .
-            " | " .
-            $note;
-
-            $audit->bind_param(
-                "iss",
-                $admin['id'],
-                $action,
-                $description
-            );
-
-            $audit->execute();
-
-            $conn->commit();
-
-            $walletMessage =
-            "Wallet adjusted successfully.";
-        }
-        catch(Exception $e)
-        {
-            $conn->rollback();
-
-            $walletError =
-            $e->getMessage();
-        }
-    }
+if (!$audit)
+{
+throw new Exception(
+'Failed to prepare audit log statement.'
+);
 }
+
+$action = 'wallet_adjustment';
+
+
+
+$safeType = strtoupper(
+(string)($type ?? 'UNKNOWN')
+);
+
+$safeNote = trim(
+(string)($note ?? '')
+);
+
+if ($safeNote === '')
+{
+$safeNote =
+'Manual wallet adjustment';
+}
+
+
+$safeAmount =
+is_numeric($amount)
+? (float)$amount
+: 0.00;
+
+$safeSellerId =
+isset($sellerId)
+? (int)$sellerId
+: 0;
+
+$auditDescription = sprintf(
+'%s | Amount: TZS %s | Seller ID: %d | Note: %s',
+$safeType,
+number_format(
+$safeAmount,
+2
+),
+$safeSellerId,
+$safeNote
+);
+
+
+
+
+
+
+$audit->bind_param(
+"iss",
+$admin['id'],
+$action,
+$auditDescription
+);
+
+if (!$audit->execute())
+{
+throw new Exception(
+'Failed to write audit log.'
+);
+}
+
+
+
+$conn->commit();
+
+$walletMessage =
+sprintf(
+'Wallet successfully %sed by TZS %s.',
+$type === 'debit'
+? 'debit'
+: 'credit',
+$safeAmount =
+is_numeric($amount)
+? (float)$amount
+: 0.00
+);
+
+        
+    
 
 ?>
 <!DOCTYPE html>

@@ -5,40 +5,43 @@ require_once __DIR__ . '/session.php';
 
 /*
 |--------------------------------------------------------------------------
-| BASIC HELPERS
+| AUTHENTICATION HELPERS
 |--------------------------------------------------------------------------
 */
 
 function isLoggedIn(): bool
 {
-    return isset($_SESSION['user_id']) && $_SESSION['user_id'] > 0;
+    return !empty($_SESSION['user_id']);
 }
 
 /*
 |--------------------------------------------------------------------------
-| FORCE LOGIN
+| LOGIN REQUIRED
 |--------------------------------------------------------------------------
 */
+
 function requireLogin(): void
 {
     if (!isLoggedIn()) {
 
-        // prevent open redirect issues
-        $redirect = urlencode($_SERVER['REQUEST_URI'] ?? '/');
+        $redirect = urlencode(
+            $_SERVER['REQUEST_URI'] ?? '/'
+        );
 
-        header("Location: ../users/login.php?redirect={$redirect}");
+        header(
+            "Location: /Karliakoo/login.php?redirect={$redirect}"
+        );
+
         exit;
     }
 }
 
 /*
 |--------------------------------------------------------------------------
-| FETCH CURRENT USER (OPTIMIZED)
-|--------------------------------------------------------------------------
-| NOTE: In production scale systems, replace this with session caching
-| to avoid DB hit on every request.
+| CURRENT USER
 |--------------------------------------------------------------------------
 */
+
 function currentUser(): ?array
 {
     global $conn;
@@ -47,13 +50,13 @@ function currentUser(): ?array
         return null;
     }
 
-    static $cachedUser = null;
+    static $userCache = null;
 
-    if ($cachedUser !== null) {
-        return $cachedUser;
+    if ($userCache !== null) {
+        return $userCache;
     }
 
-    $id = (int) $_SESSION['user_id'];
+    $userId = (int)$_SESSION['user_id'];
 
     $stmt = $conn->prepare("
         SELECT
@@ -62,109 +65,287 @@ function currentUser(): ?array
             email,
             phone,
             role,
-            created_at
+            status,
+            profile_photo,
+            email_verified,
+            phone_verified,
+            created_at,
+            last_login
         FROM users
         WHERE id = ?
         LIMIT 1
     ");
 
-    $stmt->bind_param("i", $id);
+    $stmt->bind_param(
+        "i",
+        $userId
+    );
+
     $stmt->execute();
 
-    $result = $stmt->get_result();
-    $user = $result->fetch_assoc();
+    $user =
+    $stmt->get_result()->fetch_assoc();
+
+    /*
+    |--------------------------------------------------------------------------
+    | INVALID USER
+    |--------------------------------------------------------------------------
+    */
 
     if (!$user) {
-        // invalid session cleanup
-        session_unset();
-        session_destroy();
+
+        logoutUser();
+
         return null;
     }
 
-    $cachedUser = $user;
-    return $cachedUser;
+    /*
+    |--------------------------------------------------------------------------
+    | ACCOUNT STATUS CHECK
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        !isset($user['status']) ||
+        $user['status'] !== 'active'
+    ) {
+
+        logoutUser();
+
+        header(
+            "Location: /Karliakoo/login.php?error=account_inactive"
+        );
+
+        exit;
+    }
+
+    $userCache = $user;
+
+    return $userCache;
 }
 
 /*
 |--------------------------------------------------------------------------
-| ROLE-BASED ACCESS CONTROL
+| ROLE CHECK
 |--------------------------------------------------------------------------
 */
+
 function requireRole(array $roles): void
 {
     requireLogin();
 
     $user = currentUser();
 
-    if (!$user || !in_array($user['role'], $roles, true)) {
+    if (
+        !$user ||
+        !in_array(
+            $user['role'],
+            $roles,
+            true
+        )
+    ) {
 
-        // security: invalidate session on unauthorized access
-        session_unset();
-        session_destroy();
+        http_response_code(403);
 
-        header("Location: ../users/login.php?error=unauthorized");
-        exit;
+        die(
+            "403 Forbidden - Access Denied"
+        );
     }
 }
 
 /*
 |--------------------------------------------------------------------------
-| OPTIONAL: STRICT ROLE CHECK (NO AUTO-LOGOUT)
-|--------------------------------------------------------------------------
-| Use this for soft restrictions (UI hiding instead of session destruction)
+| ROLE HELPER
 |--------------------------------------------------------------------------
 */
+
 function hasRole(string $role): bool
 {
     $user = currentUser();
-    return $user && $user['role'] === $role;
+
+    return
+        $user &&
+        $user['role'] === $role;
 }
 
 /*
 |--------------------------------------------------------------------------
-| OPTIONAL: PERMISSION GATE (SCALABLE FOR FUTURE RBAC)
+| PERMISSIONS
 |--------------------------------------------------------------------------
 */
+
 function can(string $permission): bool
 {
     $user = currentUser();
 
-    if (!$user) return false;
-
-    $role = $user['role'];
+    if (!$user) {
+        return false;
+    }
 
     $permissions = [
-        'admin' => ['all'],
+
+        'admin' => [
+            'all'
+        ],
+
         'seller' => [
             'products.manage',
             'orders.manage',
+            'shop.manage',
             'withdrawals.request'
         ],
-        'user' => [
+
+        'buyer' => [
             'orders.create',
-            'wishlist.use'
+            'orders.view',
+            'wishlist.use',
+            'reviews.create'
         ],
+
+        'b2b' => [
+            'rfq.create',
+            'rfq.manage',
+            'quotes.view',
+            'contracts.view',
+            'orders.create'
+        ],
+
         'delivery' => [
-            'deliveries.manage'
+            'deliveries.manage',
+            'deliveries.update'
         ],
+
         'agent' => [
-            'commissions.view'
+            'commissions.view',
+            'referrals.manage'
         ]
     ];
 
-    return in_array('all', $permissions[$role] ?? [])
-        || in_array($permission, $permissions[$role] ?? []);
+    $rolePermissions =
+        $permissions[$user['role']]
+        ?? [];
+
+    return
+        in_array(
+            'all',
+            $rolePermissions,
+            true
+        )
+        ||
+        in_array(
+            $permission,
+            $rolePermissions,
+            true
+        );
 }
 
 /*
 |--------------------------------------------------------------------------
-| SAFE REDIRECT HELPER
+| DASHBOARD ROUTER
 |--------------------------------------------------------------------------
 */
+
+function dashboardUrl(
+    string $role
+): string
+{
+    return match($role) {
+
+        'admin'
+            => '/Karliakoo/admin/dashboard.php',
+
+        'seller'
+            => '/Karliakoo/seller/dashboard.php',
+
+        'buyer'
+            => '/Karliakoo/users/dashboard.php',
+
+        'b2b'
+            => '/Karliakoo/b2b/dashboard.php',
+
+        'agent'
+            => '/Karliakoo/agent/dashboard.php',
+
+        'delivery'
+            => '/Karliakoo/delivery/dashboard.php',
+
+        default
+            => '/Karliakoo/login.php'
+    };
+}
+
+/*
+|--------------------------------------------------------------------------
+| REDIRECT IF LOGGED IN
+|--------------------------------------------------------------------------
+*/
+
 function redirectIfAuthenticated(): void
 {
-    if (isLoggedIn()) {
-        header("Location: /index.php");
-        exit;
+    if (!isLoggedIn()) {
+        return;
     }
+
+    $user = currentUser();
+
+    if (!$user) {
+        return;
+    }
+
+    header(
+        "Location: " .
+        dashboardUrl(
+            $user['role']
+        )
+    );
+
+    exit;
 }
+
+/*
+|--------------------------------------------------------------------------
+| LOGOUT
+|--------------------------------------------------------------------------
+*/
+
+function logoutUser(): void
+{
+    $_SESSION = [];
+
+    if (
+        ini_get(
+            "session.use_cookies"
+        )
+    ) {
+
+        $params =
+        session_get_cookie_params();
+
+        setcookie(
+            session_name(),
+            '',
+            time() - 42000,
+            $params['path'],
+            $params['domain'],
+            $params['secure'],
+            $params['httponly']
+        );
+    }
+
+    session_destroy();
+}
+
+/*
+|--------------------------------------------------------------------------
+| AUTHENTICATED USER ID
+|--------------------------------------------------------------------------
+*/
+
+function userId(): int
+{
+    return (int)(
+        $_SESSION['user_id']
+        ?? 0
+    );
+}
+?>

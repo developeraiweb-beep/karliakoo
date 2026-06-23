@@ -459,7 +459,7 @@ $product['price']
 </div>
 
 <a
-href="product.php?id=<?=
+href="product-details.php?id=<?=
 $product['id']
 ?>"
 class="btn btn-primary w-100">
