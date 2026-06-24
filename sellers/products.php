@@ -612,7 +612,8 @@ Product Inventory
 
 <img
 src="<?= htmlspecialchars($product['image']) ?>"
-class="product-image">
+alt="<?= htmlspecialchars($product['name']) ?>"
+class="img-fluid">
 
 <?php else: ?>
 

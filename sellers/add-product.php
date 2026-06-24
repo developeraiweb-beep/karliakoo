@@ -471,120 +471,153 @@ if (
             $formData['name']
         );
 
-        /*
-        |--------------------------------------------------------------------------
-        | IMAGE UPLOAD
-        |--------------------------------------------------------------------------
-        */
 
-        $image = null;
+$image = null;
 
-        if (
-            isset($_FILES['image']) &&
-            $_FILES['image']['error']
-            !== UPLOAD_ERR_NO_FILE
+if (
+isset($_FILES['image']) &&
+$_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE
+)
+{
+if ($_FILES['image']['error'] !== UPLOAD_ERR_OK)
+{
+throw new Exception(
+'Image upload failed.'
+);
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| VALIDATE IMAGE
+|--------------------------------------------------------------------------
+*/
+
+$allowedExtensions = [
+    'jpg',
+    'jpeg',
+    'png',
+    'webp'
+];
+
+$extension = strtolower(
+    pathinfo(
+        $_FILES['image']['name'],
+        PATHINFO_EXTENSION
+    )
+);
+
+if (
+    !in_array(
+        $extension,
+        $allowedExtensions,
+        true
+    )
+)
+{
+    throw new Exception(
+        'Only JPG, JPEG, PNG and WEBP images are allowed.'
+    );
+}
+
+if (
+    $_FILES['image']['size']
+    > (5 * 1024 * 1024)
+)
+{
+    throw new Exception(
+        'Image size cannot exceed 5MB.'
+    );
+}
+
+$imageInfo = @getimagesize(
+    $_FILES['image']['tmp_name']
+);
+
+if (!$imageInfo)
+{
+    throw new Exception(
+        'Invalid image file.'
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| UPLOAD DIRECTORY
+|--------------------------------------------------------------------------
+*/
+
+$uploadDirectory =
+dirname(__DIR__) .
+'/uploads/products/';
+
+if (!is_dir($uploadDirectory))
+{
+    if (
+        !mkdir(
+            $uploadDirectory,
+            0755,
+            true
         )
-        {
-            if (
-                $_FILES['image']['error']
-                !== UPLOAD_ERR_OK
-            )
-            {
-                throw new Exception(
-                    "Image upload failed."
-                );
-            }
+    )
+    {
+        throw new Exception(
+            'Unable to create upload directory.'
+        );
+    }
+}
 
-            $allowedExtensions = [
-                'jpg',
-                'jpeg',
-                'png',
-                'webp'
-            ];
+/*
+|--------------------------------------------------------------------------
+| GENERATE SECURE FILENAME
+|--------------------------------------------------------------------------
+*/
 
-            $extension =
-            strtolower(
-                pathinfo(
-                    $_FILES['image']['name'],
-                    PATHINFO_EXTENSION
-                )
-            );
+$fileName =
+'product_' .
+bin2hex(
+    random_bytes(16)
+) .
+'.' .
+$extension;
 
-            if (
-                !in_array(
-                    $extension,
-                    $allowedExtensions
-                )
-            )
-            {
-                throw new Exception(
-                    "Only JPG, PNG and WEBP images are allowed."
-                );
-            }
+$absolutePath =
+$uploadDirectory .
+$fileName;
 
-            if (
-                $_FILES['image']['size']
-                > 5 * 1024 * 1024
-            )
-            {
-                throw new Exception(
-                    "Image cannot exceed 5MB."
-                );
-            }
+/*
+|--------------------------------------------------------------------------
+| MOVE FILE
+|--------------------------------------------------------------------------
+*/
 
-            if (
-                !getimagesize(
-                    $_FILES['image']['tmp_name']
-                )
-            )
-            {
-                throw new Exception(
-                    "Invalid image file."
-                );
-            }
+if (
+    !move_uploaded_file(
+        $_FILES['image']['tmp_name'],
+        $absolutePath
+    )
+)
+{
+    throw new Exception(
+        'Failed to save image.'
+    );
+}
 
-            $uploadDir =
-            "/uploads/products/";
+/*
+|--------------------------------------------------------------------------
+| DATABASE PATH
+|--------------------------------------------------------------------------
+| Store relative path only
+|--------------------------------------------------------------------------
+*/
 
-            if (
-                !is_dir(
-                    $uploadDir
-                )
-            )
-            {
-                mkdir(
-                    $uploadDir,
-                    0755,
-                    true
-                );
-            }
+$image =
+'uploads/products/' .
+$fileName;
 
-            $fileName =
-            uniqid(
-                'product_',
-                true
-            ) .
-            '.' .
-            $extension;
 
-            $target =
-            $uploadDir .
-            $fileName;
+}
 
-            if (
-                !move_uploaded_file(
-                    $_FILES['image']['tmp_name'],
-                    $target
-                )
-            )
-            {
-                throw new Exception(
-                    "Failed to store image."
-                );
-            }
-
-            $image = $target;
-        }
 
         /*
         |--------------------------------------------------------------------------
