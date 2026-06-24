@@ -27,19 +27,19 @@ function getCount($conn, $sql, $userId)
 
 $totalRfqs = getCount(
     $conn,
-    "SELECT COUNT(*) FROM b2b_rfqs WHERE buyer_id=?",
+    "SELECT COUNT(*) FROM rfq_requests WHERE id=?",
     $userId
 );
 
 $activeRfqs = getCount(
     $conn,
-    "SELECT COUNT(*) FROM b2b_rfqs WHERE buyer_id=? AND status='open'",
+    "SELECT COUNT(*) FROM rfq_requests WHERE id=? AND status='open'",
     $userId
 );
 
 $totalQuotes = getCount(
     $conn,
-    "SELECT COUNT(*) FROM b2b_quotes WHERE buyer_id=?",
+    "SELECT COUNT(*) FROM rfq_responses WHERE id=?",
     $userId
 );
 
@@ -105,8 +105,8 @@ $spendStmt
 |--------------------------------------------------------------------------
 */
 $rfqs = $conn->prepare("
-SELECT id,title,status,created_at
-FROM b2b_rfqs
+SELECT id,quote_number,status,created_at
+FROM rfq_requests
 WHERE buyer_id=?
 ORDER BY id DESC
 LIMIT 5
@@ -128,7 +128,7 @@ $rfqs->get_result();
 |--------------------------------------------------------------------------
 */
 $orders = $conn->prepare("
-SELECT id,order_number,status,total_amount
+SELECT id,order_number,order_status,total_amount
 FROM b2b_orders
 WHERE buyer_id=?
 ORDER BY id DESC
@@ -243,11 +243,11 @@ Procurement & Supplier Management Dashboard
 
 <div>
 
-<a href="request-quote.php"
+<a href="../logout.php"
 class="btn btn-primary">
 
 <i class="fas fa-plus"></i>
-New RFQ
+Logout
 
 </a>
 
@@ -379,6 +379,18 @@ Messages
 Notifications
 </a>
 
+<a href="rfqs.php" class="btn btn-dark">
+RFQS
+</a>
+
+<a href="business-network.php" class="btn btn-info">
+Business
+</a>
+
+<a href="contacts.php" class="btn btn-danger">
+    Contacts
+</a>
+
 </div>
 
 </div>
@@ -402,7 +414,7 @@ Recent RFQs
 <div class="border-bottom pb-2 mb-2">
 
 <strong>
-<?= htmlspecialchars($row['title']) ?>
+<?= htmlspecialchars($row['quote_number']) ?>
 </strong>
 
 <br>

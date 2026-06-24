@@ -246,6 +246,11 @@ body{
         <a href="rfq-requests.php" class="btn btn-outline-info w-100">
             View RFQ Requests
         </a>
+
+        <div class="small mt-1">
+            <a href="../logout.php" class="btn btn-danger">
+                Logout
+</a>
     </div>
 </div>
 

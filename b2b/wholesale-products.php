@@ -195,14 +195,14 @@ Search
 <div class="product-card shadow-sm">
 
 <img
-src="../uploads/products/<?= htmlspecialchars($product['image']) ?>"
+src="uploads/products/product_xxxxx.jpg<?= htmlspecialchars($product['image']) ?>"
 class="product-image">
 
 <div class="p-3">
 
 <h6>
 
-<?= htmlspecialchars($product['product_name']) ?>
+<?= htmlspecialchars($product['name']) ?>
 
 </h6>
 
@@ -244,14 +244,14 @@ Stock:
 
 <strong>
 
-<?= number_format($product['stock_quantity']) ?>
+<?= number_format($product['stock']) ?>
 
 </strong>
 
 </p>
 
 <a
-href="product.php?id=<?= $product['id'] ?>"
+href="product-details.php?id=<?= $product['id'] ?>"
 class="btn btn-primary btn-sm">
 
 View Product

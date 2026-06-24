@@ -92,7 +92,7 @@ $similar = $conn->prepare("
 SELECT
 
 id,
-product_name,
+name,
 image,
 wholesale_price
 
@@ -128,7 +128,7 @@ $relatedProducts =
 content="width=device-width, initial-scale=1">
 
 <title>
-<?= htmlspecialchars($product['product_name']) ?>
+<?= htmlspecialchars($product['name']) ?>
 </title>
 
 <link
@@ -181,7 +181,7 @@ class="product-image">
 
 <h2>
 
-<?= htmlspecialchars($product['product_name']) ?>
+<?= htmlspecialchars($product['name']) ?>
 
 </h2>
 
@@ -220,7 +220,7 @@ Available Stock:
 
 <strong>
 
-<?= number_format($product['stock_quantity']) ?>
+<?= number_format($product['stock']) ?>
 
 units
 
@@ -249,7 +249,7 @@ Request Quotation
 </a>
 
 <a
-href="../shops/shop-profile.php?id=<?= $product['shop_id'] ?>"
+href="../shops/shop-profile.php?slug=<?= $product['shop_slug'] ?>"
 class="btn btn-primary">
 
 Supplier Profile
@@ -423,7 +423,7 @@ class="related-image">
 
 <h6>
 
-<?= htmlspecialchars($item['product_name']) ?>
+<?= htmlspecialchars($item['name']) ?>
 
 </h6>
 
@@ -434,7 +434,7 @@ TZS <?= number_format($item['wholesale_price'],2) ?>
 </p>
 
 <a
-href="product.php?id=<?= $item['id'] ?>"
+href="products.php?id=<?= $item['id'] ?>"
 class="btn btn-primary btn-sm">
 
 View

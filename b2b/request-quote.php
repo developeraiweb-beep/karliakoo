@@ -193,7 +193,7 @@ Request Quotation
 <div class="mb-4">
 
 <h5>
-<?= htmlspecialchars($product['product_name']) ?>
+<?= htmlspecialchars($product['name']) ?>
 </h5>
 
 <p>
@@ -288,7 +288,7 @@ Submit RFQ
 </button>
 
 <a
-href="product.php?id=<?= $product_id ?>"
+href="products.php?id=<?= $product_id ?>"
 class="btn btn-secondary">
 
 Back

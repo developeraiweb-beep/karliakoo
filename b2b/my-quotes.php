@@ -52,7 +52,7 @@ SELECT
 
 r.*,
 
-p.product_name,
+p.id,
 p.image,
 
 s.shop_name,

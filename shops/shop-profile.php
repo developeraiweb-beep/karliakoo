@@ -253,7 +253,7 @@ body{
 
 <div class="product-card shadow-sm">
 
-<img src="../uploads/products/<?= htmlspecialchars($p['image']) ?>"
+<img src="uploads/products/<?= htmlspecialchars($p['image']) ?>"
      class="product-img">
 
 <div class="p-3">
@@ -266,7 +266,7 @@ body{
     TZS <?= number_format($p['price']) ?>
 </p>
 
-<a href="../product.php?id=<?= $p['id'] ?>"
+<a href="../product-details.php?id=<?= $p['id'] ?>"
    class="btn btn-sm btn-outline-primary w-100">
    View
 </a>

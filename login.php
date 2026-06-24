@@ -1,3 +1,8 @@
+<?php if(isset($_GET['logout'])): ?>
+<div class="alert alert-success">
+    You have been logged out successfully.
+</div>
+<?php endif; ?>
 <?php
 
 session_start();
