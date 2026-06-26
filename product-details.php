@@ -667,15 +667,59 @@ Seller Information
 
 <?php
 
-$shopLogo =
+/*
+|--------------------------------------------------------------------------
+| SHOP LOGO HANDLER (PRODUCTION SAFE)
+|--------------------------------------------------------------------------
+*/
+
+$shopLogo = 'assets/images/no-shop.png';
+
+/*
+|--------------------------------------------------------------------------
+| CHECK SHOP DATA SAFELY
+|--------------------------------------------------------------------------
+*/
+
+$logoFile =
 $product['logo']
-?: 'assets/images/no-shop.png';
+?? null;
+
+if (!empty($logoFile))
+{
+    /*
+    |--------------------------------------------------------------------------
+    | POSSIBLE STORAGE PATHS
+    |--------------------------------------------------------------------------
+    */
+
+    $candidates = [
+        'uploads/shops/' . $logoFile,
+        'uploads/logos/' . $logoFile,
+        'assets/uploads/' . $logoFile,
+        $logoFile
+    ];
+
+    foreach ($candidates as $path)
+    {
+        $cleanPath = ltrim($path, '/');
+
+        if (file_exists($cleanPath))
+        {
+            $shopLogo = $cleanPath;
+            break;
+        }
+    }
+}
 
 ?>
 
 <img
 src="<?= htmlspecialchars($shopLogo) ?>"
-class="img-fluid rounded">
+alt="Shop Logo"
+class="img-fluid rounded"
+loading="lazy">
+
 
 </div>
 

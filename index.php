@@ -516,7 +516,7 @@ Popular Categories
 </h2>
 
 <a
-href="categories.php">
+href="category.php">
 
 View All
 

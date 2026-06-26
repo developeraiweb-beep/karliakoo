@@ -132,7 +132,6 @@ $statsStmt = $conn->prepare("
     FROM products
 
     WHERE shop_id = ?
-AND deleted_at IS NULL
 ");
 
 $statsStmt->bind_param(
@@ -157,7 +156,6 @@ $countSql = "
 SELECT COUNT(*) total
 FROM products
 WHERE shop_id = ?
-AND deleted_at IS NULL
 ";
 
 $params = [$shopId];
@@ -233,8 +231,7 @@ FROM products p
 LEFT JOIN categories c
 ON c.id = p.category_id
 
-WHERE shop_id = ?
-AND deleted_at IS NULL
+WHERE p.shop_id = ?
 ";
 
 $params = [$shopId];
@@ -411,9 +408,7 @@ $stats['total_products'] ?? 0
 <h6>Active Products</h6>
 
 <h3>
-<?= isset($product)
-    ? (int)$product['stock']
-    : 0 ?>
+<?= number_format((int)$stats['active_products']) ?>
 </h3>
 
 </div>
@@ -612,8 +607,7 @@ Product Inventory
 
 <img
 src="<?= htmlspecialchars($product['image']) ?>"
-alt="<?= htmlspecialchars($product['name']) ?>"
-class="img-fluid">
+class="product-image">
 
 <?php else: ?>
 
@@ -676,9 +670,11 @@ $product['category_name']
 
 <strong>
 
-TZS <?= number_format((float)$product['price'], 2) ?>
-
-
+TZS
+<?= number_format(
+(float)$product['sale_price'],
+2
+) ?>
 
 </strong>
 
@@ -690,7 +686,7 @@ text-muted">
 
 TZS
 <?= number_format(
-(float)$product['sale_price'],
+(float)$product['price'],
 2
 ) ?>
 
@@ -827,7 +823,7 @@ class="btn btn-sm btn-outline-warning">
 </a>
 
 <a
-href="delete-product.php?id=<?= (int)$product['id'] ?>&token=<?= urlencode($_SESSION['csrf_token']) ?>"
+href="delete-product.php?id=<?= (int)$product['id'] ?>"
 class="btn btn-sm btn-outline-danger"
 onclick="return confirm('Delete this product?')">
 
