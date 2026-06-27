@@ -107,6 +107,37 @@ if ($productResult) {
     }
 }
 
+$promotions = [];
+
+$sql = "
+SELECT
+    hp.*,
+    p.price,
+    p.sale_price,
+    p.name AS product_name
+FROM homepage_promotions hp
+INNER JOIN products p
+ON hp.product_id = p.id
+WHERE hp.active = 1
+AND (
+        hp.starts_at IS NULL
+        OR hp.starts_at <= NOW()
+    )
+AND (
+        hp.ends_at IS NULL
+        OR hp.ends_at >= NOW()
+    )
+ORDER BY hp.display_order ASC,
+hp.id DESC
+";
+
+$result = mysqli_query($conn, $sql);
+
+while($row = mysqli_fetch_assoc($result))
+{
+    $promotions[] = $row;
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -276,6 +307,34 @@ padding:4px 10px;
 border-radius:50px;
 font-size:12px;
 font-weight:600;
+}
+
+.carousel-item{
+    transition:transform .7s ease-in-out;
+}
+
+.carousel img{
+    transition:transform .4s;
+}
+
+.carousel img:hover{
+    transform:scale(1.05);
+}
+
+.carousel-control-prev,
+.carousel-control-next{
+    width:5%;
+}
+
+.carousel-indicators button{
+    width:12px;
+    height:12px;
+    border-radius:50%;
+}
+
+.carousel .badge{
+    font-size:.95rem;
+    padding:.55rem 1rem;
 }
 
 </style>
@@ -459,45 +518,147 @@ Register
 
 <div class="container mt-4">
 
-<div class="hero">
+<div
+id="homepageCarousel"
+class="carousel slide carousel-fade shadow rounded overflow-hidden"
+data-bs-ride="carousel"
+data-bs-interval="5000">
 
-<div>
+<div class="carousel-inner">
 
-<h1>
+<?php foreach($promotions as $index=>$promo): ?>
 
-Tanzania's Digital Marketplace
+<?php
+
+$image="assets/images/no-image.jpg";
+
+if(!empty($promo['image']))
+{
+    $candidate=ltrim($promo['image'],'/');
+
+    if(file_exists($candidate))
+    {
+        $image=$candidate;
+    }
+}
+
+?>
+
+<div
+class="carousel-item <?= $index==0 ? 'active':'' ?>">
+
+<div
+class="p-5"
+style="
+min-height:450px;
+background:
+linear-gradient(
+135deg,
+<?= htmlspecialchars($promo['background_color']) ?>,
+#111827
+);
+color:
+<?= htmlspecialchars($promo['text_color']) ?>;
+">
+
+<div class="row align-items-center">
+
+<div class="col-lg-6">
+
+<?php if(!empty($promo['badge'])): ?>
+
+<span class="badge bg-warning text-dark fs-6 mb-3">
+
+<?= htmlspecialchars($promo['badge']) ?>
+
+</span>
+
+<?php endif; ?>
+
+<h1 class="display-4 fw-bold">
+
+<?= htmlspecialchars($promo['title']) ?>
 
 </h1>
 
-<p>
+<p class="lead">
 
-Buy products,
-discover trusted sellers,
-and grow your business across Tanzania.
+<?= htmlspecialchars($promo['subtitle']) ?>
 
 </p>
 
-<div class="mt-4">
+<?php if($promo['sale_price']>0): ?>
+
+<h2>
+
+<span class="text-warning">
+
+TZS <?= number_format($promo['sale_price']) ?>
+
+</span>
+
+<small
+class="text-decoration-line-through ms-2">
+
+TZS <?= number_format($promo['price']) ?>
+
+</small>
+
+</h2>
+
+<?php endif; ?>
 
 <a
-href="products.php"
-class="btn btn-warning btn-lg me-2">
+href="product-details.php?id=<?= (int)$promo['product_id'] ?>"
+class="btn btn-warning btn-lg mt-3">
 
-Shop Now
-
-</a>
-
-<a
-href="b2b/index.php"
-class="btn btn-outline-light btn-lg">
-
-Wholesale
+<?= htmlspecialchars($promo['button_text']) ?>
 
 </a>
 
 </div>
 
+<div class="col-lg-6 text-center">
+
+<img
+src="<?= htmlspecialchars($image) ?>"
+class="img-fluid"
+style="
+max-height:360px;
+object-fit:contain;
+">
+
 </div>
+
+</div>
+
+</div>
+
+</div>
+
+<?php endforeach; ?>
+
+</div>
+
+<button
+class="carousel-control-prev"
+type="button"
+data-bs-target="#homepageCarousel"
+data-bs-slide="prev">
+
+<span class="carousel-control-prev-icon"></span>
+
+</button>
+
+<button
+class="carousel-control-next"
+type="button"
+data-bs-target="#homepageCarousel"
+data-bs-slide="next">
+
+<span class="carousel-control-next-icon"></span>
+
+</button>
 
 </div>
 

@@ -293,6 +293,10 @@ B2B Marketplace
     Seller Wallet
 </a>
 
+<a href="promotions.php" class="btn btn-outline-danger">
+    promotions
+</a>
+
 </div>
 
 </div>

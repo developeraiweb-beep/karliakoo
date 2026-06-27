@@ -17,9 +17,9 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 |
 */
 $db_host = "localhost";
-$db_name = "karliakoo";
-$db_user = "root";
-$db_pass = "";
+$db_name = "u868403395_karliakoo";
+$db_user = "u868403395_Karliakoo_adm";
+$db_pass = "Ronm@hes-1";
 
 /*
 |--------------------------------------------------------------------------
