@@ -12,36 +12,81 @@ require_once __DIR__ . '/config/db.php';
 
 $siteName = "Karliakoo Marketplace";
 
+
 /*
 |--------------------------------------------------------------------------
-| CATEGORIES
+| NEW ARRIVALS
 |--------------------------------------------------------------------------
 */
 
-$categories = [];
+$newArrivals = [];
 
-$catSql = "
+$newArrivalQuery = mysqli_query(
+    $conn,
+    "
     SELECT
-        id,
-        category_name,
-        image,
-        icon,
-        slug
-    FROM categories
-    WHERE status='active'
-    ORDER BY category_name ASC
-    LIMIT 12
-";
 
-$catResult = mysqli_query($conn, $catSql);
+        p.*,
 
-if ($catResult) {
+        s.shop_name,
 
-    while ($row = mysqli_fetch_assoc($catResult)) {
+        c.category_name
 
-        $categories[] = $row;
+    FROM products p
+
+    LEFT JOIN shops s
+        ON s.id = p.shop_id
+
+    LEFT JOIN categories c
+        ON c.id = p.category_id
+
+    WHERE
+
+        p.status='active'
+
+    ORDER BY
+
+        p.created_at DESC,
+        p.id DESC
+
+    LIMIT 46
+    "
+);
+
+if($newArrivalQuery)
+{
+    while($row = mysqli_fetch_assoc($newArrivalQuery))
+    {
+        $newArrivals[] = $row;
     }
 }
+
+
+$seed = floor(time() / 30); // every 5 minutes
+
+$sql = "
+
+SELECT
+p.*,
+s.shop_name,
+c.category_name
+
+FROM products p
+
+LEFT JOIN shops s
+ON s.id=p.shop_id
+
+LEFT JOIN categories c
+ON c.id=p.category_id
+
+WHERE p.status='active'
+
+ORDER BY
+CRC32(CONCAT(p.id, {$seed}))
+
+LIMIT 8
+
+";
 
 /*
 |--------------------------------------------------------------------------
@@ -446,11 +491,49 @@ B2B Wholesale
 <a
 class="nav-link"
 href="contact.php">
-Contact
+
 </a>
 </li>
 
 </ul>
+
+<form
+action="products.php"
+method="GET"
+class="d-flex">
+
+<select
+name="category"
+class="form-select">
+
+<option value="">
+
+Browse Categories
+
+</option>
+
+<?php foreach($categories as $cat): ?>
+
+<option
+value="<?= (int)$cat['id'] ?>">
+
+<?= htmlspecialchars($cat['category_name']) ?>
+
+</option>
+
+<?php endforeach; ?>
+
+</select>
+
+<button
+class="btn btn-primary ms-2">
+
+Go
+
+</button>
+
+</form>
+
 
 <form
 action="search.php"
@@ -513,6 +596,7 @@ Register
 </div>
 
 </nav>
+
 
 <!-- HERO -->
 
@@ -664,20 +748,34 @@ data-bs-slide="next">
 
 </div>
 
-<!-- CATEGORIES -->
+
+<!-- ==========================
+NEW ARRIVALS
+=========================== -->
 
 <div class="container mt-5">
 
 <div class="d-flex justify-content-between align-items-center mb-4">
 
-<h2 class="section-title">
+<div>
 
-Popular Categories
+<h2 class="section-title mb-1">
+
+ New Arrivals
 
 </h2>
 
+<p class="text-muted mb-0">
+
+Recently added products from trusted sellers.
+
+</p>
+
+</div>
+
 <a
-href="category.php">
+href="products.php?sort=new"
+class="btn btn-outline-primary">
 
 View All
 
@@ -687,29 +785,73 @@ View All
 
 <div class="row">
 
-<?php foreach($categories as $cat): ?>
+<?php foreach($newArrivals as $product): ?>
 
-<div class="col-lg-2 col-md-3 col-6 mb-4">
+<?php
+
+$image = $product['featured_image']
+    ?: $product['image'];
+
+$image = ltrim($image, '/');
+
+if(
+    empty($image)
+    ||
+    !file_exists($image)
+)
+{
+    $image = "assets/images/no-image.jpg";
+}
+
+?>
+
+<div class="col-lg-3 col-md-4 col-sm-6 mb-4">
 
 <a
-href="category.php?id=<?= (int)$cat['id'] ?>"
+href="product-details.php?id=<?= (int)$product['id'] ?>"
 class="text-decoration-none text-dark">
 
-<div class="category-card">
+<div class="card border-0 shadow-sm h-100">
 
-<div class="category-icon">
+<div class="position-relative">
 
-<i class="fas fa-box"></i>
+<img
+src="<?= htmlspecialchars($image) ?>"
+class="card-img-top"
+style="
+height:220px;
+object-fit:cover;">
+
+<span
+class="badge bg-success position-absolute top-0 end-0 m-2">
+
+NEW
+
+</span>
 
 </div>
 
-<h6>
+<div class="card-body">
 
-<?= htmlspecialchars(
-$cat['category_name']
-) ?>
+<h6 class="fw-bold">
+
+<?= htmlspecialchars($product['name']) ?>
 
 </h6>
+
+<p class="small text-muted mb-2">
+
+<?= htmlspecialchars($product['shop_name']) ?>
+
+</p>
+
+<h5 class="text-primary">
+
+TZS <?= number_format($product['price']) ?>
+
+</h5>
+
+</div>
 
 </div>
 
@@ -722,6 +864,8 @@ $cat['category_name']
 </div>
 
 </div>
+
+
 
 <!-- PRODUCTS HEADER -->
 
